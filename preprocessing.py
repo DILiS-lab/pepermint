@@ -8,8 +8,13 @@ import torch
 import re
 from tqdm.auto import tqdm
 from pyproteonet.data import Dataset
+import pandas as pd
 
-RANDOM_STATE = 424242
+from datasets import load_breast_cancer_dataset, load_crohns_disease_dataset, load_prostate_cancer_dataset
+from datasets import load_human_ecoli_mixture_dda_dia_dataset, load_blood_hiv_dda_dia_dataset
+from datasets import load_maxlfq_benchmark_human_ecoli_mixture_dataset
+
+RANDOM_STATE = 424242 #to making creation of artificaial missing values by random masking reproducible
 
 def create_masked_dataset(dataset: Dataset, masking_fraction: float = 0.1):
     # Incorparate missing values
@@ -73,3 +78,51 @@ def embed_sequences_t5_cached(sequences, sequence_embedding_cache_path: Path = P
     if sequence_embedding_cache_path is not None:
         cache.to_hdf(sequence_embedding_cache_path, key='data')
     return res
+
+def main():
+    datasets = {}
+    datasets['breast_cancer'] = load_breast_cancer_dataset()
+    datasets['crohns_disease'] = load_crohns_disease_dataset()
+    datasets['prostate_cancer'] = load_prostate_cancer_dataset()
+    datasets['maxlfqbench'] = load_maxlfq_benchmark_human_ecoli_mixture_dataset()
+    datasets['blood_ddia'] = load_blood_hiv_dda_dia_dataset()
+    datasets['human_ecoli_ddia'] = load_human_ecoli_mixture_dda_dia_dataset()
+
+    preprocesed = {}
+    for ds_name in ['breast_cancer', 'crohns_disease', 'prostate_cancer', 'maxlfqbench']:
+        print(ds_name)
+        dataset = datasets[ds_name]
+        dataset = create_masked_dataset(dataset=dataset, masking_fraction=0.1)
+        dataset = remove_all_missing(dataset=dataset)
+        sequences = dataset.molecules['peptide']['sequence']
+        embeddings = embed_sequences_t5_cached(sequences=sequences, batch_size=64)
+        dataset.molecules['peptide']['embedding'] = embeddings
+        preprocesed[ds_name] = dataset
+
+    for ds_name in ['blood_ddia', 'human_ecoli_ddia']:
+        print(ds_name)
+        dataset = datasets[ds_name]
+        dataset = remove_all_missing(dataset=dataset)
+        sequences = dataset.molecules['peptide']['sequence']
+        embeddings = embed_sequences_t5_cached(sequences=sequences, batch_size=64)
+        dataset.molecules['peptide']['embedding'] = embeddings
+        preprocesed[ds_name] = dataset
+
+    ds = preprocesed['maxlfqbench'].copy()
+    reference_sample = list(ds.sample_names)[0]
+    reference_ids = ds.molecules['peptide']
+    reference_ids = reference_ids[reference_ids.is_human].index
+    values = ds.get_column_flat(molecule='peptide', column='abundance', ids=reference_ids)
+    factors = values.groupby("sample").sum()
+    factors = factors[reference_sample] / factors
+    for c in ['abundance', 'abundance_gt']:
+        values = ds.get_column_flat(molecule='peptide', column=c)
+        values = values * values.index.get_level_values("sample").map(factors)
+        ds.set_column_lf(molecule='peptide', column=c, values=values)
+    preprocesed['maxlfqbench'] = ds
+
+    for ds_name, ds in preprocesed.items():
+        ds.save(f'data/datasets_preprocessed/{ds_name}', overwrite=True)
+
+if __name__ == '__main__':
+    main()

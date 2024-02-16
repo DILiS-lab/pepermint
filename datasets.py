@@ -3,7 +3,7 @@ import random
 
 import numpy as np
 import pandas as pd
-from pyproteonet.io import load_maxquant, read_multiple_mapped_dataframes
+from pyproteonet.io import load_maxquant, read_multiple_mapped_dataframes, read_mapped_dataframe
 from pyproteonet.processing import logarithmize
 from pyproteonet.normalization import normalize_sum
 
@@ -98,16 +98,19 @@ def load_blood_hiv_dda_dia_dataset(path: Path = Path('data/datasets/blood_hiv_dd
         base_path = Path(path) / kind
         proteins = pd.read_csv(base_path / 'proteins.tsv', sep='\t').rename(columns={'ProteinID':'protein'})
         proteins['peptide-protein'] = proteins['protein']
-        proteins.set_index('protein', inplace=True)
         peptides = pd.read_csv(base_path / 'peptides.tsv', sep='\t').rename(columns={'ProteinID':'protein'})
         peptides['peptide-protein'] = peptides['protein']
         peptide_groups = peptides.groupby('Sequence')
         peptides = peptide_groups[sample_names].sum(min_count=1)
         peptides[['peptide-protein']] = peptide_groups[['peptide-protein']].first()
-        peptides.reset_index(drop=False, inplace=True)
-        peptides = peptides[peptides['peptide-protein'].isin(proteins.index)]
-        ds = read_multiple_mapped_dataframes(dfs={'protein':proteins, 'peptide':peptides}, sample_columns=sample_names, molecule_columns={'peptide':'Sequence'}, 
-                                             mappings={'peptide-protein':(('peptide','peptide-protein'), ('protein','peptide-protein'))})
+        peptides['Sequence'] = peptides.index
+        ds = read_mapped_dataframe(df=peptides, sample_columns=sample_names, molecule='peptide', mapping_column='peptide-protein',
+                                   result_column_name='abundance', molecule_columns=['Sequence'],
+                                   mapping_molecule='protein', mapping_name='peptide-protein')
+        #Only keep peptides with at least one non-missing value
+        ids = ds.get_wf(molecule='peptide', column='abundance')
+        ids = ids[~ids.isna().all(axis=1)].index
+        ds = ds.copy(molecule_ids={'peptide':ids})
         vals = ds.values['protein']['abundance']
         vals[vals==0]=np.nan
         ds.values['protein']['abundance'] = vals

@@ -11,7 +11,7 @@ COMPETITOR_IMPUTATION_METHODS = ['mindet', 'minprob', 'mean', 'knn', 'missforest
 
 def main():
     runtimes_pep = dict()
-    for ds_name in ['breast_cancer', 'crohns_disease', 'prostate_cancer', 'maxlfqbench', 'blood_ddia', 'human_ecoli_ddia']:
+    for ds_name in ['blood_ddia', 'prostate_cancer', 'crohns_disease', 'breast_cancer', 'maxlfqbench', 'human_ecoli_ddia']:
         print('Imputing ' + ds_name)
         ds = Dataset.load(f'data/datasets_preprocessed/{ds_name}')
         runtimes_pep[ds_name] = impute_molecule(dataset=ds, molecule='peptide', column='abundance', methods=COMPETITOR_IMPUTATION_METHODS)

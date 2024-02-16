@@ -1,0 +1,3 @@
+[submodule "pyproteonet"]
+	path = pyproteonet
+	url = git@github.com:Tobias314/pyproteonet.git

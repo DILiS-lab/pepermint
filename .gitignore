@@ -1,6 +1,7 @@
 # Custom
 data/
 sequence_embedding_cache.h5
+.pybiomart.sqlite
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

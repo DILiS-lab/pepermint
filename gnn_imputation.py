@@ -190,11 +190,11 @@ def impute_gnn(ds: Dataset):
         trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=val_dl)
 
     # Generate a dataset all missing values masked because those are the values we want to predict/impute
-    missing_prots = ds.values['protein']['abundance']
-    missing_prots = missing_prots[missing_prots.isna()].index
+    #missing_prots = ds.values['protein']['abundance']
+    #missing_prots = missing_prots[missing_prots.isna()].index
     missing_peps = ds.values['peptide']['abundance']
     missing_peps = missing_peps[missing_peps.isna()].index
-    missing_mds = MaskedDataset.from_ids(dataset=gnn_ds, mask_ids={'protein': missing_prots, 'peptide': missing_peps})
+    missing_mds = MaskedDataset.from_ids(dataset=gnn_ds, mask_ids={'peptide': missing_peps})
     pred_dl = DataLoader([(missing_mds, ds.sample_names)], batch_size=1, collate_fn=partial(collate, subsample=False))
     pep_pred, pep_var= trainer.predict(model=model, dataloaders=pred_dl)[0]
 
