@@ -1,12 +1,8 @@
 from typing import Tuple, List
 from functools import partial
 import random
-import math
-from pathlib import Path
 
-import pandas as pd
 import numpy as np
-from matplotlib import pyplot as plt
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -31,22 +27,28 @@ class ImputationModule(L.LightningModule):
         dropout = 0.0
         heads = 64
         gat_dim = num_samples // 2
+        # Fully connected layers to transform sequence embedding to a low dimension space (bottlenecked to 16 dimensions to prevent overfitting)
         self.emb_transform = nn.Sequential(nn.Dropout(0.0), nn.Linear(1024, 32), nn.LeakyReLU(), nn.Linear(32, 16))
+        # Fully connected layers to transform concatenation of abundance vector (across samples) and sequence embedding
         self.pep_fully_connected = nn.Sequential(nn.Linear(num_samples + 16, lat_dim), nn.LeakyReLU(),
                                                  nn.Linear(lat_dim, lat_dim), nn.Dropout(dropout), nn.LeakyReLU(),
                                                  nn.Linear(lat_dim, lat_dim), nn.LeakyReLU(),
                                                  nn.Linear(lat_dim, lat_dim))
+        # Graph attention layer to allow each peptide to attend to other peptides of the same protein
         self.pep_pep_gat = HeteroGraphConv({'peptide-peptide': GATv2Conv(in_feats=(lat_dim, lat_dim), out_feats=gat_dim, feat_drop=0, num_heads=heads,)})
+        # Final fully connected layers transforming the new latent representation for each peptide
         self.pep_final = nn.Sequential(nn.Linear(gat_dim * heads + lat_dim, lat_dim), nn.LeakyReLU(),
                                        nn.Linear(lat_dim, lat_dim), nn.Dropout(dropout), nn.LeakyReLU())
+        # Seperate head for prediction of the mean of every peptide value distributions
         self.pep_final_mean = nn.Sequential(nn.Linear(lat_dim, lat_dim),  nn.LeakyReLU(), nn.Linear(lat_dim, num_samples))
+        # Seperate head for prediction of the variance/uncertainty of every peptide value
         self.pep_final_var = nn.Sequential(nn.Linear(lat_dim, lat_dim),  nn.LeakyReLU(), nn.Linear(lat_dim, num_samples))
         # value to use for missing and masked abundance values
         self.mask_value = -3
         self.loss_fn = loss_fn
 
     def forward(self, graph):
-        # mask hidden nodes
+        # rplace missing, masked and hidden nodes in the training set with the mask_value
         for key in graph.ntypes:
             data = graph.nodes[key].data
             abundance = data['abundance']
@@ -56,13 +58,16 @@ class ImputationModule(L.LightningModule):
                 abundance[data['mask']] = self.mask_value
             if 'hidden' in data:
                 abundance[torch.isnan(abundance)] = self.mask_value
+        # transform of initial abundance and sequence embedding vectors
         pep_in = graph.nodes['peptide'].data['abundance']
         pep_emb = self.emb_transform(graph.nodes['peptide'].data['embedding'])
         pep_in = torch.cat([pep_in, pep_emb], dim=-1)
         pep_latent = self.pep_fully_connected(pep_in)
+        # graph attention to attend to peptides of the same protein
         pep_vec = nn.functional.leaky_relu(self.pep_pep_gat(graph, ({'peptide':pep_latent}, {'peptide':pep_latent}))['peptide'])
         pep_vec = torch.cat(pep_vec.unbind(dim=-2), dim=-1)
         pep_vec = torch.cat([pep_vec, pep_latent], dim=-1)
+        # final transformation to predict mean and variance of peptide abundance
         pep_vec = self.pep_final(pep_vec)
         pep_mean = self.pep_final_mean(pep_vec)
         pep_var = self.pep_final_var(pep_vec)
@@ -72,7 +77,7 @@ class ImputationModule(L.LightningModule):
     def compute_loss(self, graph, prefix: str = 'train') -> torch.tensor:
         # we only compute the loss on masked nodes
         pep_mask = graph.nodes['peptide'].data['mask']
-        # store gt for later loss computation
+        # store abundance before masking (ground truth) for later loss computation
         pep_gt = graph.nodes['peptide'].data['abundance'][pep_mask].detach().clone()
         # forward pass
         pep_vec, pep_var = self(graph)
@@ -86,7 +91,7 @@ class ImputationModule(L.LightningModule):
             loss_fn = nn.GaussianNLLLoss()
             pep_loss = loss_fn(pep_pred, pep_gt, pep_var)
         self.log(f"{prefix}_pep_loss", pep_loss.item(), on_step=False, on_epoch=True, batch_size=1)
-        loss = pep_loss#prot_loss + pep_loss
+        loss = pep_loss
         return loss
 
     def training_step(self, graph, batch_idx):
@@ -107,7 +112,9 @@ class ImputationModule(L.LightningModule):
     
 
 def impute_gnn(ds: Dataset):
+    # Create a copy of the dataset to use for GNN imputation
     gnn_ds = ds.copy(columns={'peptide':'abundance', 'protein':'abundance'}, copy_molecule_set=True)
+    # Create peptide-peptide graph out of protein-peptide graph
     mapping = gnn_ds.mappings['peptide-protein'].df.copy()
     mapping['pep'] = mapping.index.get_level_values('peptide')
     mapping = mapping.merge(mapping, on='protein', suffixes=('tide_a', 'tide_b'))
@@ -117,26 +124,25 @@ def impute_gnn(ds: Dataset):
     standardizer = Standardizer(columns=['abundance'])
     gnn_ds = standardizer.standardize(gnn_ds)
     train_ds = gnn_ds.copy()
+    # Create a validation set by masking 10% of the non-missing peptide values
     val_ds = gnn_ds.copy()
     val_ids = {}
-    for mol in ['peptide', 'protein']:
-        ids = ds.values[mol]['abundance']
-        ids = ids[~ids.isna()].sample(frac=0.1).index
-        val_ids[mol] = ids
-        vals = train_ds.values[mol]['abundance']
-        vals.loc[val_ids[mol]] = np.nan
-        train_ds.values[mol]['abundance'] = vals
+    ids = ds.values['peptide']['abundance']
+    ids = ids[~ids.isna()].sample(frac=0.1).index
+    val_ids['peptide'] = ids
+    vals = train_ds.values['peptide']['abundance']
+    vals.loc[val_ids['peptide']] = np.nan
+    train_ds.values['peptide']['abundance'] = vals
 
-    # Defining our custom masking function.
+    # Defining our custom masking function realizing the self supervised learning approach
     def masking_fn(in_ds):
         pep_ids = in_ds.values['peptide']["abundance"]
         non_missing_peps = pep_ids[~pep_ids.isna()]
-        # sample around 10% of non-missing peptides
+        # sample around 10% of non-missing peptides to be masked during every training step
+        # we slightly vary the masking fraction for each trainign step to make the training more diverse and robust
         frac = random.uniform(0.05, 0.15)
         pep_ids = non_missing_peps.sample(frac=frac).index
-        prot_ids = in_ds.values['protein']["abundance"]
-        prot_ids = prot_ids[~prot_ids.isna()].index
-        return MaskedDataset.from_ids(dataset=in_ds, mask_ids={'protein': prot_ids, 'peptide': pep_ids})
+        return MaskedDataset.from_ids(dataset=in_ds, mask_ids={'peptide': pep_ids})
 
     # Create a masked dataset generator with 10 randomly masked datasets per epoch
     mask_ds = MaskedDatasetGenerator(datasets=[train_ds], generator_fn=masking_fn, epoch_size_multiplier=500)
@@ -158,6 +164,7 @@ def impute_gnn(ds: Dataset):
                 make_bidirectional=True,
                 samples=samples,
             )
+            # subsample the graph to reduce GPU memory requirements
             if subsample:
                 subset_ids = graph.nodes('peptide').int()
                 s = subset_ids.shape[0] * 0.5
@@ -171,7 +178,6 @@ def impute_gnn(ds: Dataset):
         return collator.collate(res)
     
     model = ImputationModule(num_samples=ds.num_samples, loss_fn='mse')
-    # For fast prototyping PyProteoNet provides a simple logger printing the logs, however, you can use any Lightnign logger you like (e.g. log to TensorBoard etc.)
     logger = ConsoleLogger()
     for loss_fn in ['mse', 'gnll']:
         model.loss_fn = loss_fn
@@ -181,30 +187,27 @@ def impute_gnn(ds: Dataset):
             check_val_every_n_epoch=1,
             max_epochs=1000,
             enable_checkpointing=False,
-            # Due to our self-supervised training scheme we use early stopping based on the training loss
-            callbacks=[TrainingEarlyStopping(monitor="val_pep_mse_loss", mode="min", patience=3 if loss_fn == 'mse' else 3)],
+            callbacks=[TrainingEarlyStopping(monitor="val_pep_mse_loss", mode="min", patience=3 if loss_fn == 'mse' else 3)], #Early stopping on validation MSE
         )
         num_workers = 20
         train_dl = DataLoader(mask_ds, batch_size=1, collate_fn=partial(collate, subsample=True), num_workers=num_workers)
         val_dl = DataLoader([(mask_val_ds, gnn_ds.sample_names)], batch_size=1, collate_fn=partial(collate, subsample=False), num_workers=0)
         trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=val_dl)
 
-    # Generate a dataset all missing values masked because those are the values we want to predict/impute
-    #missing_prots = ds.values['protein']['abundance']
-    #missing_prots = missing_prots[missing_prots.isna()].index
+    # Generate a impution dataset with missing values masked because those are the values we want to predict/impute
     missing_peps = ds.values['peptide']['abundance']
     missing_peps = missing_peps[missing_peps.isna()].index
     missing_mds = MaskedDataset.from_ids(dataset=gnn_ds, mask_ids={'peptide': missing_peps})
     pred_dl = DataLoader([(missing_mds, ds.sample_names)], batch_size=1, collate_fn=partial(collate, subsample=False))
     pep_pred, pep_var= trainer.predict(model=model, dataloaders=pred_dl)[0]
 
-    # Write the imputed values back to the MaskedDataset and the underlying gnn_ds dataset (We only write back to the masked/missing values)
+    # Write the imputed values back to the MaskedDataset and, therefore, the underlying gnn_ds dataset (We only write back to the masked/missing values)
     missing_mds.set_samples_value_matrix(matrix=pep_pred, molecule='peptide', column="abundance", only_set_masked=True)
     missing_mds.set_samples_value_matrix(matrix=pep_var  * standardizer.stds['peptide']['abundance'], molecule='peptide', column="var", only_set_masked=True)
 
     # Undo the standardization to tranform the imputed values back to the original scale
     res_ds = standardizer.unstandardize(gnn_ds)
 
-    # Set the result to our original dataset
+    # Write the result to our original dataset
     ds.values['peptide']['gnn_imp'] = res_ds.values['peptide']['abundance']
     ds.values['peptide']['gnn_imp_var'] = res_ds.values['peptide']['var']

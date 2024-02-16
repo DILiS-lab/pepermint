@@ -63,6 +63,7 @@ def embed_sequences_t5(sequences: pd.Series, batch_size: int = 64):
     return peptide_embeddings
 
 def embed_sequences_t5_cached(sequences, sequence_embedding_cache_path: Path = Path('sequence_embedding_cache.h5'), batch_size: int = 64):
+    # Generate sequence embeddings but storing and loading already generated embedding for a .h5 file
     cache = pd.DataFrame({'sequence':[], 'embedding':[]}).set_index('sequence')
     if sequence_embedding_cache_path.exists():
         cache = pd.read_hdf(sequence_embedding_cache_path, key='data')
