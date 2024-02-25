@@ -6,7 +6,7 @@ The implementation as well as evaluation of PEPerMINT is mostly based on our [Py
 
 To install PEPerMINT first clone this repository together with the PyProteoNet submodule using the following command:
 
-`git clone --recurse-submodules git@github.com:Tobias314/peptinet.git`
+`git clone --recurse-submodules git@github.com:Tobias314/pepermint.git`
 
 It is advisable to use Mamba to have a clean environment managing all dependencies (alternatively you can of course use Conda by just replacing all `mamba` with `conda` commands).
 Within your environment, first install some dependencies required by PyProteoNet by running the following commands
