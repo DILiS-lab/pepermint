@@ -1,10 +1,10 @@
-# PeptiNet
-PeptiNet (PEPTide Imputation Network) is a graph-based deep neural network for the imputation of peptide abundance values in mass-spectrometry-based proteomics datasets.
+# PEPerMINT
+PEPerMINT (PEPtide Mass spectrometry Imputation NeTwork)) is a graph-based deep neural network for the imputation of peptide abundance values in mass-spectrometry-based proteomics datasets.
 
 ## Installation
-The implementation as well as evaluation of PeptiNet is mostly based on our [PyProteoNet Python framework](https://github.com/Tobias314/pyproteonet) which is included into this repository as submodule.
+The implementation as well as evaluation of PEPerMINT is mostly based on our [PyProteoNet Python framework](https://github.com/Tobias314/pyproteonet) which is included into this repository as submodule.
 
-To install PeptiNet first clone this repository together with the PyProteoNet submodule using the following command:
+To install PEPerMINT first clone this repository together with the PyProteoNet submodule using the following command:
 
 `git clone --recurse-submodules git@github.com:Tobias314/peptinet.git`
 
@@ -23,8 +23,8 @@ Last but not least it is advised to install Jupyter to run the jupyter evaluatio
 `mamba install -c conda-forge jupyterlab`
 
 
-## Benchmarking PeptiNet
-We evaluate PeptiNet on multiple benchmark datasets. To rerun our analysis follow the steps described below.
+## Benchmarking PEPerMINT
+We evaluate PEPerMINT on multiple benchmark datasets. To rerun our analysis follow the steps described below.
 
 ### Data
 While most of the datasets can be downloaded from [PRIDE](https://www.ebi.ac.uk/pride/) we provide a Google Drive folder containing just the required (and much smaller) abundance files in an easy to read format.
