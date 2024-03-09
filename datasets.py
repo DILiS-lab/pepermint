@@ -7,13 +7,13 @@ from pyproteonet.io import load_maxquant, read_multiple_mapped_dataframes, read_
 from pyproteonet.processing import logarithmize
 from pyproteonet.normalization import normalize_sum
 
-def load_breast_cancer_dataset(path: Path = Path('data/datasets/PXD035857_breast_cancer')):
+def load_breast_cancer_dataset(path: Path = Path('data/datasets/PXD035857_breast_cancer'), num_sub_samples: int = 15):
     #load breast cancer dataset
     breast_cancer_ds = load_maxquant(peptides_table=path / 'peptides.txt',
                                      protein_groups_table= path /'proteinGroups.txt')
     #we work on a random subset to keep things fast and manageable
     random.seed(42)
-    sample_subset = random.sample(breast_cancer_ds.sample_names, 15)
+    sample_subset = random.sample(breast_cancer_ds.sample_names, num_sub_samples)
     print('creating subset of dataset containing samples: ' + str(sample_subset))
     print('Loading breast cancer disease dataset with samples: ' + str(sample_subset))
     bc_ds = breast_cancer_ds.copy(samples=sample_subset)
@@ -25,7 +25,6 @@ def load_breast_cancer_dataset(path: Path = Path('data/datasets/PXD035857_breast
     bc_ds.rename_columns(columns={'peptide':{'Intensity': 'abundance'}}, inplace=True)
     bc_ds.molecules['peptide'].rename(columns={'Sequence': 'sequence'}, inplace=True)
     return bc_ds
-
 
 def load_crohns_disease_dataset(path = Path('data/datasets/PXD002882_crohns_disease')):
     #load crohns dataset
@@ -50,6 +49,16 @@ def load_crohns_disease_dataset(path = Path('data/datasets/PXD002882_crohns_dise
     crohns_ds.molecules['peptide'].rename(columns={'Sequence': 'sequence'}, inplace=True)
     return crohns_ds
 
+def load_crohns_disease_fibrosis_dataset(path = Path('data/datasets/PXD022214_crohns_disease_fibrosis')):
+    #load prostate cancer dataset
+    crohns_ds = load_maxquant(peptides_table=path / 'peptides.txt', protein_groups_table= path /'proteinGroups.txt')
+    crohns_ds = logarithmize(crohns_ds)
+    # Rename molecules and columns for convenience
+    crohns_ds.rename_molecule('protein_group', 'protein')
+    crohns_ds.rename_mapping('peptide-protein_group', 'peptide-protein')
+    crohns_ds.rename_columns(columns={'peptide':{'Intensity': 'abundance'}}, inplace=True)
+    crohns_ds.molecules['peptide'].rename(columns={'Sequence': 'sequence'}, inplace=True)
+    return crohns_ds
 
 def load_prostate_cancer_dataset(path: Path = Path('data/datasets/PXD029525_prostate_cancer')):
     #load prostate cancer dataset
@@ -78,7 +87,7 @@ def load_maxlfq_benchmark_human_ecoli_mixture_dataset(path: Path = Path('data/da
     #Propagate the organism information to peptide level
     mapped = ds.molecule_set.get_mapped(molecule='protein', mapping='peptide-protein', molecule_columns='is_ecoli')
     grouped = mapped.groupby('peptide').is_ecoli.mean()
-    #Remove peptides that are not uniquely mapped to a single organism
+    #Only set organism for = peptides uniquely mapped to a single organism
     grouped = grouped[(grouped==0) | (grouped==1)]
     ds.molecules['peptide']['is_ecoli'] = False
     ds.molecules['peptide'].loc[grouped.index, 'is_ecoli'] = grouped.astype(bool)

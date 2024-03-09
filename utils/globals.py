@@ -1,0 +1,32 @@
+method_label_map = {
+    "gnn_imp": "PEPerMINT",
+    "isvd": "ISVD",
+    "iterative": "MICE",
+    "knn": "KNN",
+    "missforest": "RF",
+    "minprob": "MinProb",
+    "mindet": "MinDet",
+    "bpca": "BPCA",
+    "bpca_t": "BPCA Transpose",
+    "dae": "DAE",
+    "vae": "VAE",
+    "mean": "Average",
+    "median": "Median",
+    "cf": "CF",
+}
+
+dataset_label_map = {
+    "prostate_cancer": "prostate cancer (A1)",
+    "breast_cancer": "breast cancer (A3)",
+    "breast_cancer_6": "breast cancer 6 samples",
+    "breast_cancer_20": "breast cancer 20 samples",
+    "blood_ddia": "HIV blood (B2)",
+    "human_ecoli_ddia": "human-E. coli (B1)",
+    "crohns_fibrosis": "Crohn's fibrosis (A2)",
+    "maxlfqbench": "MaxLFQ benchmark (C)",
+    "prostate_cancer_no_skip": "Prostate Cancer \n No Skip Connection",
+    "prostate_cancer_random_edges": "Prostate Cancer \n Random Edges Peptide Graph",
+    'prostate_cancer_no_skip_random_edges': 'Prostate Cancer \n No Skip Connection \n and Random Edges Peptide Graph',
+    'prostate_cancer_zero_sequence_embeddings': 'Prostate Cancer \n No Sequence Embeddings',
+    "crohns_disease": "Crohn's Disease",
+}

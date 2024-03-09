@@ -1,5 +1,6 @@
 from typing import Optional
 from pathlib import Path
+import math
 
 import numpy as np
 import pandas as pd
@@ -12,7 +13,7 @@ import pandas as pd
 
 from datasets import load_breast_cancer_dataset, load_crohns_disease_dataset, load_prostate_cancer_dataset
 from datasets import load_human_ecoli_mixture_dda_dia_dataset, load_blood_hiv_dda_dia_dataset
-from datasets import load_maxlfq_benchmark_human_ecoli_mixture_dataset
+from datasets import load_maxlfq_benchmark_human_ecoli_mixture_dataset, load_crohns_disease_fibrosis_dataset
 
 RANDOM_STATE = 424242 #to making creation of artificaial missing values by random masking reproducible
 
@@ -82,15 +83,21 @@ def embed_sequences_t5_cached(sequences, sequence_embedding_cache_path: Path = P
 
 def main():
     datasets = {}
-    datasets['breast_cancer'] = load_breast_cancer_dataset()
-    datasets['crohns_disease'] = load_crohns_disease_dataset()
-    datasets['prostate_cancer'] = load_prostate_cancer_dataset()
-    datasets['maxlfqbench'] = load_maxlfq_benchmark_human_ecoli_mixture_dataset()
-    datasets['blood_ddia'] = load_blood_hiv_dda_dia_dataset()
-    datasets['human_ecoli_ddia'] = load_human_ecoli_mixture_dda_dia_dataset()
+    #datasets['breast_cancer'] = load_breast_cancer_dataset()
+    datasets['breast_cancer_20'] = load_breast_cancer_dataset(num_sub_samples=20)
+    datasets['breast_cancer_6'] = load_breast_cancer_dataset(num_sub_samples=6)
+    # datasets['crohns_disease'] = load_crohns_disease_dataset()
+    # datasets['crohns_fibrosis'] = load_crohns_disease_fibrosis_dataset()
+    # datasets['prostate_cancer'] = load_prostate_cancer_dataset()
+    # datasets['maxlfqbench'] = load_maxlfq_benchmark_human_ecoli_mixture_dataset()
+    # datasets['blood_ddia'] = load_blood_hiv_dda_dia_dataset()
+    # datasets['human_ecoli_ddia'] = load_human_ecoli_mixture_dda_dia_dataset()
 
     preprocesed = {}
-    for ds_name in ['breast_cancer', 'crohns_disease', 'prostate_cancer', 'maxlfqbench']:
+    #Masked datasets
+    for ds_name in ['breast_cancer', 'breast_cancer_20', 'breast_cancer_6', 'crohns_disease', 'crohns_fibrosis', 'prostate_cancer', 'maxlfqbench']:
+        if ds_name not in datasets:
+            continue
         print(ds_name)
         dataset = datasets[ds_name]
         dataset = create_masked_dataset(dataset=dataset, masking_fraction=0.1)
@@ -100,7 +107,10 @@ def main():
         dataset.molecules['peptide']['embedding'] = embeddings
         preprocesed[ds_name] = dataset
 
+    #DDA/DIA datasets
     for ds_name in ['blood_ddia', 'human_ecoli_ddia']:
+        if ds_name not in datasets:
+            continue
         print(ds_name)
         dataset = datasets[ds_name]
         dataset = remove_all_missing(dataset=dataset)
@@ -109,18 +119,22 @@ def main():
         dataset.molecules['peptide']['embedding'] = embeddings
         preprocesed[ds_name] = dataset
 
-    ds = preprocesed['maxlfqbench'].copy()
-    reference_sample = list(ds.sample_names)[0]
-    reference_ids = ds.molecules['peptide']
-    reference_ids = reference_ids[reference_ids.is_human].index
-    values = ds.get_column_flat(molecule='peptide', column='abundance', ids=reference_ids)
-    factors = values.groupby("sample").sum()
-    factors = factors[reference_sample] / factors
-    for c in ['abundance', 'abundance_gt']:
-        values = ds.get_column_flat(molecule='peptide', column=c)
-        values = values * values.index.get_level_values("sample").map(factors)
-        ds.set_column_lf(molecule='peptide', column=c, values=values)
-    preprocesed['maxlfqbench'] = ds
+    #Ratio dataset
+    if 'maxlfqbench' in preprocesed:
+        print('Normalizing maxlfqbench dataset')
+        ds = preprocesed['maxlfqbench'].copy()
+        reference_sample = list(ds.sample_names)[0]
+        reference_ids = ds.molecules['peptide']
+        reference_ids = reference_ids[reference_ids.is_human].index
+        # values are already log-transformed, so we transform them back for the normalization
+        values = math.e ** ds.get_column_flat(molecule='peptide', column='abundance', ids=reference_ids)
+        factors = values.groupby("sample").sum()
+        factors = factors[reference_sample] / factors
+        for c in ['abundance', 'abundance_gt']:
+            values = math.e ** ds.get_column_flat(molecule='peptide', column=c)
+            values = values * values.index.get_level_values("sample").map(factors)
+            ds.set_column_lf(molecule='peptide', column=c, values=np.log(values))
+        preprocesed['maxlfqbench'] = ds
 
     for ds_name, ds in preprocesed.items():
         ds.save(f'data/datasets_preprocessed/{ds_name}', overwrite=True)
