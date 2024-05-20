@@ -18,7 +18,7 @@ Once done, you can install PyProteoNet itself running the following command (you
 
 `pip install -e pyprotoenet/.`
 
-Last but not least, it is advised to install Jupyter to run the evaluation and plotting code provided as Jupyter notebooks.
+Last, but not least, it is advised to install Jupyter to run the evaluation and plotting code provided as Jupyter notebooks.
 
 `mamba install -c conda-forge jupyterlab`
 
@@ -27,8 +27,8 @@ Last but not least, it is advised to install Jupyter to run the evaluation and p
 We evaluate PEPerMINT on multiple benchmark datasets. To rerun our analysis, follow the steps described below.
 
 ### Data
-While most of the datasets can be downloaded from [PRIDE](https://www.ebi.ac.uk/pride/), we provide a Google Drive folder containing just the required abundance files in an easy-to-read format.
-Just use this [link](https://drive.google.com/drive/folders/1_YDJqfC5THMlJwJUsD-6O9tWdfzsacUL?usp=sharing), download the `datasets/` folder, and place it inside the `data/datasets` folder of your cloned repository. Alternatively, you can also download the already preprocessed or imputed datasets from the same link by downloading the `datasets_preprocessed` and `datasets_imputed` followed by placing them inside the `data` folder of your repository.
+While most of the datasets can be downloaded from [PRIDE](https://www.ebi.ac.uk/pride/), we provide a [Zenodo repository](https://zenodo.org/records/11216899) containing just the required abundance files in an easy-to-read format.
+Just download the `data.zip` file, extract the `datasets/` folder, and place it inside the `data/datasets` folder of your cloned repository. Alternatively, you can also download the already preprocessed or imputed datasets from the same link by extracting the `datasets_preprocessed` and `datasets_imputed` folders from the `data.zip` file followed by placing them inside the `data` folder of your repository.
 
 ### Preprocessing
 For benchmarking purposes, we introduce artificial missing values into some of the datasets.
@@ -38,8 +38,8 @@ All this can be done by running
 
 `python preprocessing.py`
 
-This loads the datasets, runs the preprocessing and saves the preprocessed datasets to `data/datasets_preprocessed`. Generated sequence embeddings are cached.
-To speed up the embedding generation on the first run, you might consider downloading [this file](https://drive.google.com/file/d/1uEtNgq_sAdE24rp-X7c4CXeCeaEel1Aa/view?usp=sharing) containing the already cached embeddings and place it inside the root repository folder. 
+This loads the datasets, runs the preprocessing, and saves the preprocessed datasets to `data/datasets_preprocessed`. Generated sequence embeddings are cached.
+To speed up the embedding generation on the first run, you might consider downloading already generated and cached embeddings from Zenodo. To do so download the [sequence_embedding_cache.h5](https://zenodo.org/records/11216899/files/sequence_embedding_cache.h5?download=1) file and place it inside the root repository folder. 
 
 ### Imputation
 To run both the competitor imputation methods and our newly proposed deep neural network for imputation on the preprocessed datasets, just run `imputation.py` (running all imputation methods on all datasets might take several hours and should be done on a system with enough GPU memory for neural network training and prediction).
